@@ -138,8 +138,17 @@ class Game {
     // warm up: compile every shader now so the first shot/splat never hitches
     await progress(0.85, 'Warming up…');
     this._warmup();
-    // compile in parallel (KHR_parallel_shader_compile) so the loading screen keeps animating instead of freezing
-    try { await G.renderer.compileAsync(scene, camera); } catch { G.renderer.compile(scene, camera); }
+    // compile in parallel (KHR_parallel_shader_compile) so the loading screen keeps animating instead of freezing.
+    // Programs are keyed on the bound render target (tone mapping / output colour space): compile against the
+    // composer's HDR buffer the scene is really drawn into, or every program here is a throwaway variant and the first
+    // frames compile the real ones one blocking link at a time. The menu showcase (pedestal kid, portraits) joins the
+    // same batch instead of freezing the first menu.
+    const prevRT = G.renderer.getRenderTarget();
+    G.renderer.setRenderTarget(this.R.composer.renderTarget1);
+    const batch = [G.renderer.compileAsync(scene, camera)];
+    G.renderer.setRenderTarget(prevRT);
+    batch.push(this.showcase._warmup());
+    try { await Promise.all(batch); } catch { /* a failed program surfaces on first draw */ }
     await progress(0.93, 'Warming up…');
     for (let i = 0; i < 3; i++) { this._frame(1 / 60); await nextFrame(); }
     await progress(1, 'Ready!');
