@@ -170,7 +170,8 @@ class Game {
     G.mode = 'menu';
     this.menus?.show(params.has('skipTitle') ? 'main' : 'title');
     this._applyAudioVolumes();
-    requestAnimationFrame(() => this._loop());
+    this._loopFn = (t) => this._loop(t);
+    requestAnimationFrame(this._loopFn);
     if (params.has('autostart')) this.api.startMatch({ mapId: map.id, difficulty: this.settings.difficulty, duration: +params.get('autostart') || this.settings.matchLength });
     this.bootMs = Math.round(performance.now() - t0);
     window.__inkwave = this; // debug/audit hook
@@ -667,9 +668,12 @@ class Game {
   }
 
   // ---------------------------------------------------------------------------------------- loop
-  _loop() {
-    requestAnimationFrame(() => this._loop());
-    this.timer.update(); let dt = this.timer.getDelta();
+  _loop(now) {
+    requestAnimationFrame(this._loopFn);
+    // step by the frame's own (vsync-aligned) timestamp, not performance.now() at whatever moment this callback got to
+    // run: callback start times jitter by a few ms, which made dt alternate (e.g. 6 / 10 ms) at a steady 120 Hz and the
+    // motion judder even with no dropped frame
+    this.timer.update(now); let dt = this.timer.getDelta();
     if (this.frozen) return;
     this.fpsAcc += dt; this.fpsN++;
     if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
