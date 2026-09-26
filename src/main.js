@@ -156,7 +156,7 @@ class Game {
     const batch = [G.renderer.compileAsync(scene, camera)];
     G.renderer.setRenderTarget(prevRT);
     scene.remove(warm);
-    batch.push(this.showcase._warmup());
+    batch.push(this.showcase._warmup(), G.env.ready);   // + env Worker jobs (sea textures, terrain)
     try { await Promise.all(batch); } catch { /* a failed program surfaces on first draw */ }
     await progress(0.93, 'Warming up…');
     for (let i = 0; i < 3; i++) { this._frame(1 / 60); await nextFrame(); }
@@ -554,6 +554,7 @@ class Game {
       G.fx.setLighting?.(G.env.getSkyColors?.());
     }
     this._applyNight();   // after any stage rebuild too (new prop kit / decor)
+    await G.env.ready;    // a new stage's foam field comes from the env Worker
     this.mapDef = map;
     this._setPalette(this._pickPalette());
     const m = (this.match = G.match = new Match({
