@@ -159,7 +159,9 @@ class Game {
     batch.push(this.showcase._warmup(), G.env.ready);   // + env Worker jobs (sea textures, terrain)
     try { await Promise.all(batch); } catch { /* a failed program surfaces on first draw */ }
     await progress(0.93, 'Warming up…');
-    for (let i = 0; i < 3; i++) { this._frame(1 / 60); await nextFrame(); }
+    // first warm frame takes the screen-FX route (final pass HDR → OutputPass) so both are compiled before play
+    for (let i = 0; i < 3; i++) { this.R.forceOutput = i === 0; this._frame(1 / 60); await nextFrame(); }
+    this.R.forceOutput = false;
     await progress(1, 'Ready!');
     await new Promise((r) => setTimeout(r, 250));
 
