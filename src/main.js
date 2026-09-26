@@ -143,10 +143,19 @@ class Game {
     // composer's HDR buffer the scene is really drawn into, or every program here is a throwaway variant and the first
     // frames compile the real ones one blocking link at a time. The menu showcase (pedestal kid, portraits) joins the
     // same batch instead of freezing the first menu.
+    // Materials first drawn mid-match (screen-FX passes that start disabled, bombs, storm clouds) join as hidden
+    // stand-ins: compile() gathers materials from invisible objects too.
+    const warm = new THREE.Group();
+    warm.visible = false;
+    const quad = new THREE.PlaneGeometry(2, 2);
+    for (const m of [this.screenfx?.mat, this.screenfx?.lens?.mat]) if (m) warm.add(new THREE.Mesh(quad, m));
+    warm.add(...G.projectiles.warmMeshes());
+    scene.add(warm);
     const prevRT = G.renderer.getRenderTarget();
     G.renderer.setRenderTarget(this.R.composer.renderTarget1);
     const batch = [G.renderer.compileAsync(scene, camera)];
     G.renderer.setRenderTarget(prevRT);
+    scene.remove(warm);
     batch.push(this.showcase._warmup());
     try { await Promise.all(batch); } catch { /* a failed program surfaces on first draw */ }
     await progress(0.93, 'Warming up…');
