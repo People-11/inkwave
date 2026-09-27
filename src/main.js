@@ -20,7 +20,7 @@ import { Physics, Hit } from './game/physics.js';
 import { NavGraph } from './game/nav.js';
 import { Projectiles } from './game/weapons.js';
 import { CameraRig } from './game/cameraRig.js';
-import { Match } from './game/match.js';
+import { Match, prerollBotLooks } from './game/match.js';
 import { Minimap } from './game/minimap.js';
 import { Showcase } from './game/showcase.js';
 
@@ -182,6 +182,7 @@ class Game {
     requestAnimationFrame(this._loopFn);
     if (params.has('autostart')) this.api.startMatch({ mapId: map.id, difficulty: this.settings.difficulty, duration: +params.get('autostart') || this.settings.matchLength });
     this.bootMs = Math.round(performance.now() - t0);
+    prerollBotLooks();   // next match's bot hair, built while the menus idle
     window.__inkwave = this; // debug/audit hook
     window.__G = G;
     this.debug = {
@@ -641,6 +642,7 @@ class Game {
     this._setPalette(this._pickPalette());
     this._startAttract();
     this.menus?.show('main');
+    prerollBotLooks();
     this._playMusic('menu');
     G.audio?.duck?.(1, 0.01);
     this._fade(0, 500);
@@ -677,6 +679,7 @@ class Game {
     this.showcase.showResults(0, won, G.teamColors[0], team.map((a) => ({ weapon: a.weaponId, style: a.character.style || { hair: a.slot % 4, skin: (a.slot * 3) % 4 }, name: a.name })));
     this.menus?.showResults(data);
     this.menus?.show('results');
+    prerollBotLooks();   // for a rematch
     G.audio?.play(won ? 'victory_fanfare' : 'defeat_jingle');
     setTimeout(() => this._playMusic(won ? 'results_win' : 'results_lose'), 2600);
   }
