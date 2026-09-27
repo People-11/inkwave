@@ -201,8 +201,12 @@ export class BotBrain {
       const sweepAmt = w.kind === 'roller' ? 0 : 0.55;
       wantYaw += Math.sin(this.sweep) * sweepAmt;
       wantPitch = w.kind === 'charger' ? -0.12 : w.kind === 'blaster' ? -0.28 : w.kind === 'slosher' ? -0.16 : w.kind === 'splatling' ? -0.3 : -0.42;
-      const aheadStats = G.paint.regionStats(a.pos.x + Math.sin(wantYaw) * 4, a.pos.y, a.pos.z + Math.cos(wantYaw) * 4, 3, a.team, _stats);
-      const needPaint = aheadStats.n === 0 || aheadStats.own < 0.75;
+      if ((this._npT = (this._npT || 0) - dt) <= 0) {
+        this._npT = 0.1;
+        const st = G.paint.regionStats(a.pos.x + Math.sin(wantYaw) * 4, a.pos.y, a.pos.z + Math.cos(wantYaw) * 4, 3, a.team, _stats);
+        this._needPaint = st.n === 0 || st.own < 0.75;
+      }
+      const needPaint = this._needPaint;
       if (w.kind === 'roller') {
         it.fire = inkFrac > 0.08 && (needPaint || Math.random() < 0.02) && wantMove;
       } else if (w.kind === 'charger') {
