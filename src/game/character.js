@@ -106,6 +106,19 @@ const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vect
 const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion(), _q5 = new THREE.Quaternion(), _q6 = new THREE.Quaternion();
 const _e1 = new THREE.Euler(0, 0, 0, 'YXZ');
 const _m1 = new THREE.Matrix4(), _m2 = new THREE.Matrix4();
+
+// Object3D.updateMatrixWorld minus hidden subtrees (the off form, holstered parts); explicit reads use updateWorldMatrix
+function updateVisibleMatrixWorld(force) {
+  if (!this.visible) return;
+  if (this.matrixAutoUpdate) this.updateMatrix();
+  if (this.matrixWorldNeedsUpdate || force) {
+    if (this.matrixWorldAutoUpdate) this.parent === null ? this.matrixWorld.copy(this.matrix) : this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
+    this.matrixWorldNeedsUpdate = false;
+    force = true;
+  }
+  for (const c of this.children) if (c.matrixWorldAutoUpdate || force) updateVisibleMatrixWorld.call(c, force);
+}
+
 const _pA = new THREE.Vector3(), _pT = new THREE.Vector3(), _pE = new THREE.Vector3(), _pN = new THREE.Vector3(), _pH = new THREE.Vector3(), _pD = new THREE.Vector3();
 const _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3();
 const _cP = new THREE.Vector3(), _cQ = new THREE.Quaternion(), _aP = new THREE.Vector3(), _aQ = new THREE.Quaternion();
@@ -323,6 +336,7 @@ export class Character {
     this.climbInset = PLAYER.radius;
 
     this.root = new THREE.Group(); this.root.name = 'squidkid:' + this.name;
+    this.root.updateMatrixWorld = updateVisibleMatrixWorld;
     this.model = new THREE.Group(); this.root.add(this.model);
     this.kid = new THREE.Group(); this.model.add(this.kid);
     this.squidRoot = new THREE.Group(); this.model.add(this.squidRoot);

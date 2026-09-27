@@ -1,6 +1,6 @@
 // INKWAVE — boot, main loop and game-flow orchestration (menus ⇄ attract mode ⇄ matches ⇄ results).
 import * as THREE from 'three';
-import { G, on, emit, clamp, damp } from './core/ctx.js';
+import { G, on, clamp, damp } from './core/ctx.js';
 import { Renderer } from './core/renderer.js';
 import { Input } from './core/input.js';
 import { mapTheme,
@@ -70,6 +70,7 @@ class Game {
     this.R = new Renderer(app, this.settings);
     G.renderer = this.R.renderer;
     const scene = (G.scene = new THREE.Scene());
+    scene.matrixWorldAutoUpdate = false;   // updated once per frame in _frame, not again by every render of it
     const camera = (G.camera = new THREE.PerspectiveCamera(this.settings.fov, innerWidth / innerHeight, 0.15, 6500));
     camera.position.set(0, 40, -60);
     this.R.setScene(scene, camera);
@@ -796,6 +797,7 @@ class Game {
     this._frameN = (this._frameN || 0) + 1;
     if (this.settings.quality !== 'low' || (this._frameN & 1)) sm.needsUpdate = true;
     if (!this._skipRender) {
+      G.scene.updateMatrixWorld();
       G.env.renderReflection?.(G.renderer, G.scene, G.camera);   // before, not nested in, the frame's render (see env)
       this.R.render();
       if (this.showcase.mode) sm.needsUpdate = true;
