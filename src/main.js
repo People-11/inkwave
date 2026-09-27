@@ -785,6 +785,7 @@ class Game {
     this._frameN = (this._frameN || 0) + 1;
     if (this.settings.quality !== 'low' || (this._frameN & 1)) sm.needsUpdate = true;
     if (!this._skipRender) {
+      G.env.renderReflection?.(G.renderer, G.scene, G.camera);   // before, not nested in, the frame's render (see env)
       this.R.render();
       if (this.showcase.mode) sm.needsUpdate = true;
       this.showcase.render();

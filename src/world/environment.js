@@ -12,7 +12,7 @@
 // level-derived hull / floating-slab sets (no sea inside hulls, deep shade under the decks), calm sheltered basin,
 // wall-bounced ripples, froth wherever something stands in the water (analytic for hulls, triangle ∩ water-plane
 // contours of the stage props for piles / fenders / boats), waterline strips on the faces (reflected-sun caustics +
-// hull wet band), a planar reflection of the stage (Environment._renderReflection, quality-scaled) and a baked
+// hull wet band), a planar reflection of the stage (Environment.renderReflection, quality-scaled) and a baked
 // far-reflection cube for the distant land. The other stages keep the original open-sea shader untouched.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -442,7 +442,7 @@ float swellAmp(float dDeck) { return mix(0.035, 0.16, smoothstep(3.0, 70.0, dDec
 //   • uWet (hulls, anything piercing the surface): never any sea inside; a lapping froth line hugs their sides
 //   • uRects (floating slabs): the water carries on underneath in deep shade — no sky showing through the gap
 //   • calm, glassy channels: wave normals damped near the faces, plus ripples bounced back off every face
-//   • planar reflection of the real scene (uReflTex, Environment._renderReflection) over the analytic sky + baked
+//   • planar reflection of the real scene (uReflTex, Environment.renderReflection) over the analytic sky + baked
 //     clouds; reflected geometry occludes the sun glints
 //   • colour: open harbour teal → darker bottle green hugging the faces
 const GLSL_SEA_MARINA = /* glsl */`
@@ -1446,8 +1446,9 @@ export class Environment {
     this.sea.frustumCulled = false;
     this.sea.receiveShadow = true;
     this.sea.renderOrder = -1;
-    // marina: the planar reflection is rendered right before the sea draws (camera already final for this frame)
-    this.sea.onBeforeRender = (renderer, scene, camera) => this._renderReflection(renderer, scene, camera);
+    // marina: the planar reflection is rendered before the sea draws (camera already final for this frame). The game loop
+    // calls renderReflection() itself before the frame renders; this nested call is the fallback (labs, other loops)
+    this.sea.onBeforeRender = (renderer, scene, camera) => this.renderReflection(renderer, scene, camera);
     this.root.add(this.sea);
   }
 
@@ -1456,7 +1457,10 @@ export class Environment {
   // reflects), rendered without sea or sky dome into a mip-mapped HDR target; alpha = coverage, so the sea shader keeps
   // its analytic sky + clouds wherever nothing stands above the water. Once per frame, only in marina mode, skipped for
   // override passes (GTAO normals) and when the camera dips under the surface. Resolution follows the quality preset.
-  _renderReflection(renderer, scene, camera) {
+  // Call it at the top level, before the frame's own render: nested inside that render (from sea.onBeforeRender) three
+  // gives it a second render state whose lights version never matches, so every lit material drawn in both passes
+  // re-derived its program parameters twice a frame (~0.3–0.6 ms of main-thread time on Halyard).
+  renderReflection(renderer, scene, camera) {
     const U = this.U;
     if (!this._marina || this._reflBusy || scene.overrideMaterial || this._reflFrame === this._frameId) return;
     this._reflFrame = this._frameId;
