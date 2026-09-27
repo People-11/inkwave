@@ -188,10 +188,11 @@ export const MATCH = {
 };
 
 export const DIFFICULTY = {
-  // aimOmega / aimTurn: bot aim spring stiffness (rad/s) and turn-rate cap (rad/s) — see bots.js
-  easy:   { id: 'easy',   name: 'Chill',  reaction: 0.55, aimError: 0.11, fireDiscipline: 0.55, awareness: 16, aimOmega: 9,  aimTurn: 7 },
-  normal: { id: 'normal', name: 'Fresh',  reaction: 0.32, aimError: 0.06, fireDiscipline: 0.8,  awareness: 21, aimOmega: 13, aimTurn: 10 },
-  hard:   { id: 'hard',   name: 'Fierce', reaction: 0.17, aimError: 0.03, fireDiscipline: 0.95, awareness: 26, aimOmega: 18, aimTurn: 14 },
+  // strategy: 0 paints, 1 picks fights + team phases, 2 lanes / roles / focus fire. fov: view-cone half-angle (rad);
+  // spot: seconds to notice someone mid-range; lead / track: lead fraction and lag (s) of its motion estimate
+  easy:   { id: 'easy',   name: 'Chill',  strategy: 0, reaction: 0.5,  aimError: 0.1,  fireDiscipline: 0.55, awareness: 18, fov: 0.87, spot: 1.1,  hear: 8,  lead: 0.55, track: 0.32, aimOmega: 7,  aimTurn: 5 },
+  normal: { id: 'normal', name: 'Fresh',  strategy: 1, reaction: 0.36, aimError: 0.075, fireDiscipline: 0.8, awareness: 21, fov: 0.96, spot: 0.8,  hear: 11, lead: 0.72, track: 0.24, aimOmega: 9,  aimTurn: 6.5 },
+  hard:   { id: 'hard',   name: 'Fierce', strategy: 2, reaction: 0.26, aimError: 0.055, fireDiscipline: 0.95, awareness: 24, fov: 1.05, spot: 0.55, hear: 14, lead: 0.88, track: 0.16, aimOmega: 11, aimTurn: 8 },
 };
 
 // Every stage can be played by day or at dusk: `times` maps the time of day to an environment theme (`theme` is the

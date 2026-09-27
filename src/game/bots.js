@@ -40,6 +40,12 @@ export class BotBrain {
     this.mvYaw = this.a.yaw; this.mvMag = 0;
     this.dodgeCd = 1 + Math.random() * 2;
     this.retreatT = 0; this._firing = false;
+    this.spot = new Map();          // enemy → noticed (≥ 1 = seen)
+    this.visible = false;
+    this.lastSeen = new THREE.Vector3(); this.lastSeenT = -99;
+    this.estVel = new THREE.Vector3(); this.leadK = 1;
+    this.lookAt = new THREE.Vector3(); this.lookT = 0;
+    this._pt = 0;
   }
 
   update(dt) {
@@ -67,12 +73,16 @@ export class BotBrain {
     this.acqT += dt; this.t += dt;
 
     // ---------------- perception
+    this._pt += dt; this.lookT -= dt;
     if (this.think <= 0) {
       this.think = 0.15 + Math.random() * 0.1;
-      this._perceive();
+      this._perceive(this._pt);
+      this._pt = 0;
     }
     const tgt = this.target;
-    if (tgt && !tgt.alive) { this.target = null; }
+    if (tgt && !tgt.alive) { this.target = null; this.visible = false; }
+    if (this.target && this.visible) this.estVel.lerp(this.target.vel, 1 - Math.exp(-dt / this.diff.track));
+    else this.estVel.multiplyScalar(Math.exp(-dt * 3));
 
     // ---------------- mode selection (retreat = break line of sight and heal in own ink when losing a duel)
     const inkFrac = a.ink / PLAYER.inkMax;
@@ -89,11 +99,14 @@ export class BotBrain {
     }
     if (this.mode === 'refill' && inkFrac >= this.refillUntil) this.mode = 'paint';
     if (this.mode !== 'refill' && this.mode !== 'retreat') this.mode = this.target ? 'fight' : 'paint';
+    if (this.mode === 'fight' && this.diff.strategy >= 1 && this.visible && !this._worthFighting()) {
+      this.mode = 'retreat'; this.retreatT = 1.6 + Math.random(); this.repath = 0; this._pickRetreat();
+    }
 
     // ---------------- navigation goal
     this.goalTimer -= dt; this.repath -= dt;
     if (this.mode === 'fight' && this.target) {
-      if (this.repath <= 0) this._pathTo(this.target.pos, 0.6);
+      if (this.repath <= 0) this._pathTo(this.visible ? this.target.pos : this.lastSeen, 0.6);
     } else if (this.mode === 'refill') {
       if (this.repath <= 0 || !this.path) this._pickRefill();
     } else if (this.mode === 'retreat') {
@@ -110,19 +123,21 @@ export class BotBrain {
     it.fire = false; it.sub = false; it.special = false; it.squid = false; it.jump = false;
     let wantYaw = wantMove ? Math.atan2(move.x, move.z) : a.yaw;
     let wantPitch = -0.1;
-    const enemyVisible = this.target && this.seeTimer > 0;
+    const enemyVisible = this.target && this.visible && this.seeTimer > 0;
     let fightDist = 0, idealYaw = 0, idealPitch = 0, aimDist = 6;
 
     if ((this.mode === 'fight' || this.mode === 'retreat') && this.target) {
       const t = this.target;
-      const dx = t.pos.x - a.pos.x, dz = t.pos.z - a.pos.z;
+      const tp = this.visible ? t.pos : this.lastSeen;
+      const dx = tp.x - a.pos.x, dz = tp.z - a.pos.z;
       const dist = Math.hypot(dx, dz);
       fightDist = dist;
       const range = this._range();
       // lead the target a little (projectile flight time)
       // lead the target by the projectile's time to arrive (lobs: the heave windup + a slower, longer arc)
       const lead = w.kind === 'charger' ? 0 : w.kind === 'slosher' ? (w.windup || 0.13) + dist / ((w.projSpeed || 15) * 0.88) : dist / (w.projSpeed || 30);
-      _v.set(t.pos.x + t.vel.x * lead, t.pos.y + (t.smoothY || 0) + (t.form === 'squid' ? 0.3 : 0.85), t.pos.z + t.vel.z * lead);
+      const lk = lead * this.leadK;
+      _v.set(tp.x + this.estVel.x * lk, tp.y + (t.smoothY || 0) + (t.form === 'squid' ? 0.3 : 0.85), tp.z + this.estVel.z * lk);
       _v2.copy(_v); _v2.x -= a.pos.x; _v2.y -= a.pos.y + 1.1; _v2.z -= a.pos.z;
       idealYaw = Math.atan2(_v2.x, _v2.z);
       idealPitch = Math.atan2(_v2.y, Math.hypot(_v2.x, _v2.z));
@@ -241,6 +256,7 @@ export class BotBrain {
     if (this._bombAim) { it.sub = true; this._bombAim = false; this._releaseBomb = true; }
     else if (this._releaseBomb) { it.sub = false; this._releaseBomb = false; }
 
+    if (this.lookT > 0 && !enemyVisible) { wantYaw = Math.atan2(this.lookAt.x - a.pos.x, this.lookAt.z - a.pos.z); wantPitch = -0.05; }
     // ---------------- aim: critically-damped spring with a turn-rate cap (flicks accelerate and settle; no twitch)
     const fighting = this.mode === 'fight';
     const om = fighting ? (this.diff.aimOmega ?? 13) : 8;
@@ -311,39 +327,77 @@ export class BotBrain {
     return w.range;
   }
 
-  _perceive() {
-    const a = this.a;
+  _perceive(dt) {
+    const a = this.a, D = this.diff;
     const eye = _v.copy(a.pos); eye.y += 1.3;
     let best = null, bd = Infinity;
-    const aw = this.diff.awareness;
     for (const e of G.actors) {
-      if (e.team === a.team || !e.alive) continue;
+      if (e.team === a.team || !e.alive) { this.spot.delete(e); continue; }
       const d = e.pos.distanceTo(a.pos);
-      if (d > aw) continue;
-      const swimming = e.anim.form === 'swim';
-      const hs = Math.hypot(e.vel.x, e.vel.z);
-      if (swimming && d > 3 && !(hs > 7 && d < 9)) continue;
-      _v2.copy(e.pos); _v2.y += e.form === 'squid' ? 0.3 : 1.0;
-      if (!G.physics.los(eye, _v2)) continue;
-      const score = d - (e === this.target ? 4 : 0);
-      if (score < bd) { bd = score; best = e; }
+      let s = this.spot.get(e) || 0, vis = false;
+      if (d < D.awareness) {
+        const hs = Math.hypot(e.vel.x, e.vel.z);
+        if (!(e.anim.form === 'swim' && d > 3 && !(hs > 7 && d < 9))) {
+          _v2.copy(e.pos); _v2.y += e.form === 'squid' ? 0.3 : 1.0;
+          vis = G.physics.los(eye, _v2);
+        }
+      }
+      const ang = Math.abs(angleDiff(this.aimYaw, Math.atan2(e.pos.x - a.pos.x, e.pos.z - a.pos.z)));
+      if (vis && d < 3.5) s = 1;
+      else if (vis && ang < D.fov) s += (dt / D.spot) * (1 - 0.5 * ang / D.fov) * clamp(1.5 - d / D.awareness, 0.5, 1.5) * (e.lastFire < 0.3 ? 2.5 : 1);
+      else if (s < 1 || !vis) s -= dt * (vis ? 0.3 : 0.6);
+      if (a.lastAttacker === e && a.lastDamage < 0.35) { this._glance(e.pos, 1.0); s = Math.max(s, 0.5); }
+      else if (e.lastFire < 0.3 && d < D.hear && !(this.target && this.visible)) this._glance(e.pos, 0.6);
+      s = clamp(s, 0, 1.2);
+      this.spot.set(e, s);
+      if (vis && s >= 1) {
+        let score = d - (e === this.target ? 4 : 0);
+        if (D.strategy >= 2) for (const m of G.actors) if (m !== a && m.team === a.team && m.bot && m.bot.target === e) score -= 3;
+        if (score < bd) { bd = score; best = e; }
+      }
     }
     if (best) {
       if (best !== this.target) {
         this.target = best; this.react = this.diff.reaction * (0.7 + Math.random() * 0.6); this.repath = 0;
+        this.estVel.set(0, 0, 0); this.leadK = D.lead * (0.8 + Math.random() * 0.4);
         // first look lands a little off (over- or under-shoot) and settles — like a human flick
         this.acqT = 0; this.acqSignY = (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5); this.acqSignP = (Math.random() - 0.5) * 1.2;
       }
-      this.seeTimer = 1.2;
-      this.lostTimer = 0;
+      this.visible = true; this.seeTimer = 0.5; this.lostTimer = 0;
+      this.lastSeen.copy(best.pos); this.lastSeenT = G.time;
+    } else if (this.target && this.target.alive && G.time - this.lastSeenT < 0.45) {
+      this.lastSeen.addScaledVector(this.estVel, dt);
     } else {
-      this.seeTimer -= 0.2;
+      this.visible = false;
+      this.seeTimer -= dt;
       if (this.target) {
-        this.lostTimer += 0.2;
-        if (this.lostTimer > 2.5 || this.target.pos.distanceTo(a.pos) > aw + 6) this.target = null;
+        this.lostTimer += dt;
+        const there = Math.hypot(this.lastSeen.x - a.pos.x, this.lastSeen.z - a.pos.z) < 2;
+        if (this.lostTimer > (D.strategy >= 1 ? 3 : 2) || (there && this.lostTimer > 0.6)) this.target = null;
       }
     }
-    this.react -= 0.2;
+    this.react -= dt;
+  }
+
+  _glance(pos, t) { this.lookAt.copy(pos); this.lookT = t; }
+
+  _worthFighting() {
+    const a = this.a, t = this.target;
+    let foes = 0, mates = 0;
+    for (const e of G.actors) {
+      if (!e.alive || e === a) continue;
+      if (e.team === a.team) { if (e.pos.distanceTo(a.pos) < 12) mates++; }
+      else if ((this.spot.get(e) || 0) >= 1 && e.pos.distanceTo(t.pos) < 10) foes++;
+    }
+    if (foes >= mates + 2) return false;
+    return !(a.hp / PLAYER.hp < 0.45 && t.hp / PLAYER.hp > 0.75 && a.weapon.kind !== 'roller');
+  }
+
+  _phase() {
+    const a = this.a;
+    let own = 0, foe = 0;
+    for (const e of G.actors) if (e.alive) { if (e.team === a.team) own++; else foe++; }
+    return { lead: own - foe, endgame: !!(G.match && G.match.time < 30) };
   }
 
   _pathTo(pos, maxUp = 0.8) {
@@ -365,6 +419,13 @@ export class BotBrain {
     const ownPad = G.level.spawnPads[a.team];
     const total = ownPad.distanceTo(enemyPad);
     const mates = G.actors.filter((o) => o !== a && o.team === a.team && o.bot);
+    const S = this.diff.strategy, ph = S >= 1 ? this._phase() : { lead: 0, endgame: false };
+    const paintW = ph.endgame ? 1.6 : 1, pushW = S >= 1 && ph.lead >= 2 ? 2 : 1;
+    // lanes: left / middle / right / middle across the line between the bases
+    const ax = enemyPad.x - ownPad.x, az = enemyPad.z - ownPad.z, al = Math.hypot(ax, az) || 1;
+    const sideX = -az / al, sideZ = ax / al;
+    const lane = [-1, 0, 1, 0][a.slot % 4] * 9;
+    const back = a.weapon.kind === 'charger' || a.weapon.kind === 'splatling';
     for (let i = 0; i < 16; i++) {
       const id = nav.validIds[(Math.random() * nav.validIds.length) | 0];
       const n = nav.nodes[id];
@@ -374,7 +435,13 @@ export class BotBrain {
       const st = G.paint.regionStats(n.x, n.y, n.z, 3.5, a.team, _stats);
       if (!st.n) continue;
       const progress = 1 - Math.hypot(n.x - enemyPad.x, n.z - enemyPad.z) / total; // 0 at own base → 1 at enemy base
-      let score = (st.empty + st.enemy * 1.25) * 12 - d * 0.18 + clamp(progress, 0, 0.8) * 4 + Math.random() * 2.5;
+      let score = (st.empty + st.enemy * 1.25) * 12 * paintW - d * 0.18 + clamp(progress, 0, 0.8) * 4 * pushW + Math.random() * 2.5;
+      if (S >= 1 && ph.lead <= -2) score -= Math.abs(progress - 0.35) * 8;
+      if (S >= 2) {
+        const lat = (n.x - ownPad.x) * sideX + (n.z - ownPad.z) * sideZ;
+        score -= Math.abs(lat - lane) * 0.25;
+        if (back) score += (n.y - ownPad.y) * 1.2 - Math.max(0, progress - 0.55) * 10;   // ranged: high ground, stay back
+      }
       for (const m of mates) if (m.bot.goal >= 0) { const g = nav.nodes[m.bot.goal]; if (Math.hypot(g.x - n.x, g.z - n.z) < 7) score -= 4; }
       if (score > bs) { bs = score; best = id; }
     }
