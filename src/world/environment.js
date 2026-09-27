@@ -18,7 +18,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PLAYER } from '../config.js';
 import { G } from '../core/ctx.js';
-import { mulberry, hash2, fbm, smooth, islandField, runJob } from './envgen.js';
+import { mulberry, hash2, smooth, islandField, runJob } from './envgen.js';
 
 const WATER_Y = PLAYER.waterY; // -1.6
 const DEG = Math.PI / 180;

@@ -18,7 +18,7 @@
 
 import { DEFAULT_SETTINGS } from '../config.js';
 import {
-  V, music as musicSingleton, makeImpulse, mulberry32, mtof, perc, ahr, adsr, pts, sweep, strokeWave, pulseWave,
+  V, music as musicSingleton, makeImpulse, mulberry32, mtof, ahr, adsr, pts, sweep, strokeWave, pulseWave,
   kick, snare, crash, tom, brass, bell, pad, bass,
 } from './music.js';
 

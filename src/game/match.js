@@ -1,7 +1,7 @@
 // Match: turf-war rules, lifecycle (intro → countdown → play → time's up → judge → results), team setup.
 import * as THREE from 'three';
-import { G, emit, on, clamp } from '../core/ctx.js';
-import { MATCH, PLAYER, WEAPON_ORDER, BOT_NAMES, TEAM_NAMES } from '../config.js';
+import { G, emit, on } from '../core/ctx.js';
+import { MATCH, PLAYER, WEAPON_ORDER, BOT_NAMES } from '../config.js';
 import { Actor } from './actor.js';
 import { BotBrain } from './bots.js';
 import { randomStyle } from './character-style.js';
