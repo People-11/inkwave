@@ -20,9 +20,9 @@
 //   map.players[].yaw   radians on the minimap canvas: 0 = pointing up (−y), positive = clockwise.
 //   markers[].angle     radians in screen space toward the off-screen ally: 0 = right, positive = clockwise (y down).
 //   percents            accepted as 0..100 or 0..1.
-import { h, clamp, colorVars, toHex, fmtTime, fmtInt, splatSVG, splatShape, pct, shade, lerp, easeOutBack, easeOutCubic, restartAnim, prefersReducedMotion } from './ui-util.js';
+import { h, clamp, colorVars, toHex, fmtTime, fmtInt, splatSVG, splatShape, pct, shade, lerp, easeOutBack, easeOutCubic, restartAnim } from './ui-util.js';
 import { SQUID, SPLAT_ICON, DEATH_ICON, GLYPHS, SUB_ICONS, richText, keycap, specialIcon, weaponIcon } from './ui-icons.js';
-import { WEAPONS, SPECIALS, TEAM_NAMES, SUB, PLAYER, MATCH } from '../config.js';
+import { WEAPONS, TEAM_NAMES, SUB, PLAYER, MATCH } from '../config.js';
 import { on, G } from '../core/ctx.js';
 
 let HUD_ID = 0;
@@ -72,7 +72,7 @@ export class HUD {
     this._fxLoop = this._fxLoop.bind(this);
     this._lastFx = 0;
     this._rafId = 0;
-    this._onResize = () => this._resizeCanvas();
+    this._onResize = () => { this._resizeCanvas(); this._tankBox = null; };
     addEventListener('resize', this._onResize);
     this._bindBus();
   }
@@ -499,7 +499,7 @@ export class HUD {
         this._addDamageDir(attacker);
       }),
       on('splatted', (e) => this._onSplatted(e)),
-      on('respawn', ({ actor }) => { if (actor && actor === this._local()) { this._clearDamageDirs(); this._restart(this.shield, 'is-on'); } }),
+      on('respawn', ({ actor }) => { if (actor && actor === this._local()) this._clearDamageDirs(); }),
       on('recoil', ({ amount }) => { if (this._live()) { this._bloom = Math.min(1, this._bloom + 0.18 + (amount || 0) * 6); this._tank.wobble = Math.min(1, this._tank.wobble + 0.25); } }),
       on('weapon:fire', ({ actor, hand }) => {
         if (!actor || actor !== this._local() || !this._live()) return;
@@ -524,7 +524,7 @@ export class HUD {
     this._clearDamageDirs();
     this.kcards.innerHTML = ''; this.callouts.innerHTML = ''; this.tpops.innerHTML = ''; this.downLayer.innerHTML = ''; this._downs = [];
     this.el.classList.remove('is-live');
-    this._L.turfTxt = null;
+    this._L.turfN = null;
     this.turfNum.textContent = '0';
     this._lineup(match);
   }
@@ -926,8 +926,8 @@ export class HUD {
   _drawTank(dt, sub, low, nosub) {
     const T = this._tank, c = this.tankCtx, cv = this.tankCanvas;
     const dpr = Math.min(2, devicePixelRatio || 1);
-    const cw = cv.clientWidth || 18, chh = cv.clientHeight || 74;
-    const W = Math.round(cw * dpr), H = Math.round(chh * dpr);
+    const box = this._tankBox || (this._tankBox = [cv.clientWidth || 18, cv.clientHeight || 74]);   // reading it per frame forces a layout
+    const W = Math.round(box[0] * dpr), H = Math.round(box[1] * dpr);
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     const L = this._L;
     if (!L.tankCol) { const s = L.ca || '#ff8a14'; L.tankCol = [shade(s, 0.42), s, shade(s, -0.3), shade(s, -0.55)]; }
@@ -1034,10 +1034,8 @@ export class HUD {
     // total counts up toward the real value
     const tgt = this._turfTotal;
     if (this._turfShown < tgt) this._turfShown = Math.min(tgt, this._turfShown + Math.max(6, (tgt - this._turfShown) * 7) * dt);
-    const txt = fmtInt(Math.floor(this._turfShown));
-    if (txt !== this._L.turfTxt) {
-      this._L.turfTxt = txt; this.turfNum.textContent = txt;
-    }
+    const n = Math.floor(this._turfShown);
+    if (n !== this._L.turfN) { this._L.turfN = n; this.turfNum.textContent = fmtInt(n); }
   }
   _turfPop(n) {
     const pops = this.tpops.children;
@@ -1420,6 +1418,3 @@ export class HUD {
     return this._smears.length > 0 || (c.clearRect(0, 0, W, H), false);
   }
 }
-
-// reduced motion: the CSS handles most of it; expose for callers that want to skip heavy one-shots
-export const hudReducedMotion = prefersReducedMotion;
