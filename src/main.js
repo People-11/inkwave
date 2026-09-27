@@ -557,7 +557,7 @@ class Game {
     await this._fade(1, 350);
     G.music?.stop?.(0.3); this._musicTrack = null;
     this.showcase.hide();
-    if (this.match) this.match.dispose();
+    if (this.match) { this.match.dispose(); this.match = G.match = null; }   // frames keep running through the awaits below
     G.projectiles.clear(); G.fx.clear?.(); G.paint.clear();
     const map = MAPS.find((m) => m.id === opts.mapId) || MAPS[0];
     if ((map.layout || map.id) !== this.layoutId) await this._buildWorld(map);
