@@ -9,6 +9,23 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { QUALITY } from '../config.js';
 import { G } from './ctx.js';
 
+// The shadow pass draws every caster with one shared depth material, whose program key flips between instanced, skinned
+// and plain meshes (a full program lookup per switch). Those get their own unless they need three's per-material variant.
+function ownDepthMaterial(proto, variants) {
+  const mats = Array.from({ length: variants }, () => new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }));
+  Object.defineProperty(proto, 'customDepthMaterial', {
+    get() {
+      if (this._cdm !== undefined) return this._cdm;
+      const m = this.material;
+      if (Array.isArray(m) || m.alphaTest > 0 || m.alphaToCoverage || m.displacementMap || m.clippingPlanes?.length) return undefined;
+      return mats[this.instanceColor ? 1 : 0];
+    },
+    set(v) { this._cdm = v; },
+  });
+}
+ownDepthMaterial(THREE.InstancedMesh.prototype, 2);
+ownDepthMaterial(THREE.SkinnedMesh.prototype, 1);
+
 // The last full-screen pass: bloom's additive composite (UnrealBloomPass's own blend step is switched off), the colour
 // grade and, when it draws to the canvas, tone mapping + sRGB (what OutputPass did). One read + one write of the frame
 // instead of three. With screen FX running it renders the HDR variant and screen FX → OutputPass finish the frame.
