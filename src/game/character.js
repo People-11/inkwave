@@ -116,7 +116,11 @@ function updateVisibleMatrixWorld(force) {
     this.matrixWorldNeedsUpdate = false;
     force = true;
   }
-  for (const c of this.children) if (c.matrixWorldAutoUpdate || force) updateVisibleMatrixWorld.call(c, force);
+  for (const c of this.children) {
+    if (!c.matrixWorldAutoUpdate && !force) continue;
+    if (c.updateMatrixWorld !== THREE.Object3D.prototype.updateMatrixWorld) c.updateMatrixWorld(force);   // skinned meshes refresh their bind matrix
+    else updateVisibleMatrixWorld.call(c, force);
+  }
 }
 const _pA = new THREE.Vector3(), _pT = new THREE.Vector3(), _pE = new THREE.Vector3(), _pN = new THREE.Vector3(), _pH = new THREE.Vector3(), _pD = new THREE.Vector3();
 const _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3();
