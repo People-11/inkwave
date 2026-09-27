@@ -164,6 +164,9 @@ class Game {
     batch.push(this.showcase._warmup(), G.env.ready);   // + env Worker jobs (sea textures, terrain)
     try { await Promise.all(batch); } catch { /* a failed program surfaces on first draw */ }
     await progress(0.93, 'Warming up…');
+    // the main menu's 3D avatar: its first draw is the showcase kid's first real draw (D3D finishes those shaders on the
+    // GPU thread, ~0.6 s) — queue the same request now so the warm frames pay for it and the menu gets it from cache
+    this.menus?._portraitInto?.(document.createElement('span'), { kind: 'head', size: 160 });
     // first warm frame takes the screen-FX route (final pass HDR → OutputPass) so both are compiled before play
     for (let i = 0; i < 3; i++) { this.R.forceOutput = i === 0; this._frame(1 / 60); await nextFrame(); }
     this.R.forceOutput = false;
