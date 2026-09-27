@@ -607,6 +607,7 @@ class Game {
   // take it back without a click. Needs the start / rematch click; otherwise play stays windowed with click-to-relock.
   _enterFullscreen() {
     if (!this.settings.fullscreen || document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+    if (navigator.userActivation && !navigator.userActivation.isActive) return;   // no click / key (autostart, gamepad)
     document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => navigator.keyboard?.lock?.(['Escape'])).catch(() => {});
   }
   _exitFullscreen() { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }
